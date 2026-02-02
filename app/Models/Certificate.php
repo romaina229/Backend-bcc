@@ -32,7 +32,8 @@ class Certificate extends Model
     protected $casts = [
         'date_obtention' => 'datetime',
         'date_emission' => 'datetime',
-        'date_expiration' => 'datetime'
+        'date_expiration' => 'datetime',
+        'note_finale' => 'float',
     ];
 
     protected static function boot()
@@ -46,6 +47,7 @@ class Certificate extends Model
         });
     }
 
+    // Relations
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -56,6 +58,7 @@ class Certificate extends Model
         return $this->belongsTo(Course::class, 'cours_id');
     }
 
+    // Helper methods
     public function isExpired()
     {
         return $this->date_expiration && now()->gt($this->date_expiration);
@@ -68,7 +71,6 @@ class Certificate extends Model
 
     public function generateQRCode()
     {
-        // Générer un QR code avec l'URL de vérification
         $url = $this->getVerificationUrl();
         // Utiliser une bibliothèque QR code ici
         return $url;

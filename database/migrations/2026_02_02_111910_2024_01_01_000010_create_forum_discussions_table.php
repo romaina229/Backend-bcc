@@ -1,5 +1,4 @@
 <?php
-
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -20,7 +19,7 @@ return new class extends Migration
             $table->boolean('est_epingle')->default(false);
             $table->boolean('est_verrouille')->default(false);
             $table->integer('nombre_vues')->default(0);
-            $table->foreignId('dernier_post_id')->nullable()->constrained('forum_posts')->onDelete('set null');
+            $table->unsignedBigInteger('dernier_post_id')->nullable(); // Pas de contrainte ici
             $table->json('tags')->nullable();
             $table->timestamps();
         });

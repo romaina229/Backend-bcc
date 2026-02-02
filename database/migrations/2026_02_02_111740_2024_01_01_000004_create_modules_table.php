@@ -1,12 +1,10 @@
-
 <?php
-// 2024_01_01_000003_create_modules_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateModulesTable extends Migration
+return new class extends Migration
 {
     public function up()
     {
@@ -15,12 +13,10 @@ class CreateModulesTable extends Migration
             $table->string('titre', 200);
             $table->string('slug')->unique();
             $table->text('description')->nullable();
-
             $table->foreignId('cours_id')
                   ->constrained('courses')
                   ->onDelete('cascade');
-
-            $table->integer('duree')->nullable(); // en heures
+            $table->integer('duree')->nullable();
             $table->integer('ordre')->default(0);
             $table->boolean('actif')->default(true);
             $table->json('objectifs')->nullable();
@@ -35,4 +31,4 @@ class CreateModulesTable extends Migration
     {
         Schema::dropIfExists('modules');
     }
-}
+};

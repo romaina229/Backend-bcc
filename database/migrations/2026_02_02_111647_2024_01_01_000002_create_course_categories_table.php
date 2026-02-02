@@ -1,16 +1,15 @@
-// 2024_01_01_000001_create_course_categories_table.php
 <?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateCourseCategoriesTable extends Migration
+return new class extends Migration
 {
     public function up()
     {
         Schema::create('course_categories', function (Blueprint $table) {
-            $table->id(); // Ceci crée un BIGINT UNSIGNED AUTO_INCREMENT
+            $table->id();
             $table->string('name');
             $table->string('slug')->unique();
             $table->text('description')->nullable();
@@ -28,4 +27,4 @@ class CreateCourseCategoriesTable extends Migration
     {
         Schema::dropIfExists('course_categories');
     }
-}
+};

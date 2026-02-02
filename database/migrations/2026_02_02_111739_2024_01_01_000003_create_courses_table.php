@@ -1,11 +1,10 @@
-// 2024_01_01_000002_create_courses_table.php
 <?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateCoursesTable extends Migration
+return new class extends Migration
 {
     public function up()
     {
@@ -15,19 +14,14 @@ class CreateCoursesTable extends Migration
             $table->string('slug')->unique();
             $table->text('description');
             $table->longText('description_longue')->nullable();
-
-            // Clé étrangère vers course_categories
             $table->foreignId('categorie_id')
                   ->constrained('course_categories')
                   ->onDelete('cascade');
-
-            // Clé étrangère vers users (pour l'instructeur)
             $table->foreignId('instructor_id')
                   ->constrained('users')
                   ->onDelete('cascade');
-
             $table->enum('niveau', ['debutant', 'intermediaire', 'avance', 'expert']);
-            $table->integer('duree'); // en heures
+            $table->integer('duree');
             $table->decimal('prix', 10, 2);
             $table->decimal('prix_promotion', 10, 2)->nullable();
             $table->string('image')->nullable();
@@ -54,4 +48,4 @@ class CreateCoursesTable extends Migration
     {
         Schema::dropIfExists('courses');
     }
-}
+};

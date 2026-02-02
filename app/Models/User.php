@@ -12,26 +12,18 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
+    protected $table = 'users';
+
     protected $fillable = [
-        'nom',
-        'prenom',
+        'name',
         'email',
         'password',
-        'telephone',
-        'adresse',
-        'ville',
-        'code_postal',
-        'pays',
-        'date_naissance',
-        'genre',
-        'profession',
-        'entreprise',
-        'bio',
+        'role',
         'avatar',
+        'phone',
+        'address',
+        'bio',
         'email_verified_at',
-        'derniere_connexion',
-        'statut',
-        'preferences'
     ];
 
     protected $hidden = [
@@ -42,16 +34,9 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'derniere_connexion' => 'datetime',
-        'date_naissance' => 'date',
-        'preferences' => 'array'
     ];
 
-    public function getFullNameAttribute()
-    {
-        return "{$this->prenom} {$this->nom}";
-    }
-
+    // Relations
     public function enrollments()
     {
         return $this->hasMany(Enrollment::class);
@@ -60,7 +45,7 @@ class User extends Authenticatable
     public function courses()
     {
         return $this->belongsToMany(Course::class, 'enrollments')
-            ->withPivot(['statut', 'date_inscription', 'date_fin', 'progression'])
+            ->withPivot(['status', 'progress', 'enrolled_at'])
             ->withTimestamps();
     }
 
@@ -96,21 +81,27 @@ class User extends Authenticatable
 
     public function notifications()
     {
-        return $this->hasMany(Notification::class);
+        return $this->morphMany(\Illuminate\Notifications\DatabaseNotification::class, 'notifiable');
     }
 
+    // Helper methods
     public function isAdmin()
     {
-        return $this->hasRole('admin');
+        return $this->role === 'admin';
     }
 
     public function isInstructor()
     {
-        return $this->hasRole('instructor') || $this->isAdmin();
+        return in_array($this->role, ['admin', 'formateur']);
     }
 
     public function isStudent()
     {
-        return $this->hasRole('student');
+        return $this->role === 'participant';
+    }
+
+    public function getFullNameAttribute()
+    {
+        return $this->name;
     }
 }

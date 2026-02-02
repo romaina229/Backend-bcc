@@ -5,46 +5,38 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Module extends Model
+class CourseCategory extends Model
 {
     use HasFactory;
 
-    protected $table = 'modules';
+    protected $table = 'course_categories';
 
     protected $fillable = [
-        'titre',
+        'name',
         'slug',
         'description',
-        'cours_id',
-        'duree',
+        'icon',
+        'color',
         'ordre',
         'actif',
-        'objectifs',
-        'prerequis',
-        'icon',
-        'statut',
+        'meta_titre',
+        'meta_description',
     ];
 
     protected $casts = [
-        'objectifs' => 'array',
-        'prerequis' => 'array',
         'actif' => 'boolean',
     ];
 
     // Relations
-    public function course()
+    public function courses()
     {
-        return $this->belongsTo(Course::class, 'cours_id');
+        return $this->hasMany(Course::class, 'categorie_id');
     }
 
-    public function lessons()
+    public function activeCourses()
     {
-        return $this->hasMany(Lesson::class, 'module_id')->orderBy('ordre');
-    }
-
-    public function quizzes()
-    {
-        return $this->hasMany(Quiz::class, 'module_id');
+        return $this->hasMany(Course::class, 'categorie_id')
+            ->where('statut', 'actif');
     }
 
     // Scopes

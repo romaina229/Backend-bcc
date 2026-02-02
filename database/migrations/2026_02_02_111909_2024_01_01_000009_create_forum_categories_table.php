@@ -11,16 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('weeks', function (Blueprint $table) {
+        Schema::create('forum_categories', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('session_id')->constrained();
-            $table->integer('week_number');
-            $table->string('theme');
-            $table->text('description');
-            $table->date('start_date');
-            $table->date('end_date');
+            $table->string('nom')->unique();
+            $table->text('description')->nullable();
             $table->timestamps();
-
         });
     }
 
@@ -29,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('weeks');
+        Schema::dropIfExists('forum_categories');
     }
 };

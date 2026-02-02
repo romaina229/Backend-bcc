@@ -9,6 +9,8 @@ class ForumDiscussion extends Model
 {
     use HasFactory;
 
+    protected $table = 'forum_discussions';
+
     protected $fillable = [
         'titre',
         'slug',
@@ -30,6 +32,7 @@ class ForumDiscussion extends Model
         'tags' => 'array'
     ];
 
+    // Relations
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -47,12 +50,12 @@ class ForumDiscussion extends Model
 
     public function posts()
     {
-        return $this->hasMany(ForumPost::class)->orderBy('created_at');
+        return $this->hasMany(ForumPost::class, 'discussion_id')->orderBy('created_at');
     }
 
     public function firstPost()
     {
-        return $this->hasOne(ForumPost::class)->oldest();
+        return $this->hasOne(ForumPost::class, 'discussion_id')->oldest();
     }
 
     public function lastPost()
@@ -60,6 +63,7 @@ class ForumDiscussion extends Model
         return $this->belongsTo(ForumPost::class, 'dernier_post_id');
     }
 
+    // Helper methods
     public function incrementViews()
     {
         $this->increment('nombre_vues');
@@ -79,6 +83,7 @@ class ForumDiscussion extends Model
         return $this->posts()->count();
     }
 
+    // Scopes
     public function scopePinned($query)
     {
         return $query->where('est_epingle', true);
@@ -87,5 +92,10 @@ class ForumDiscussion extends Model
     public function scopeUnlocked($query)
     {
         return $query->where('est_verrouille', false);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('statut', 'actif');
     }
 }
