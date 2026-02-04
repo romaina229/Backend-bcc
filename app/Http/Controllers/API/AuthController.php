@@ -7,22 +7,20 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules;
-use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'nom' => 'required|string|max:100',
-            'prenom' => 'required|string|max:100',
+            'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'telephone' => 'nullable|string|max:20',
-            'date_naissance' => 'nullable|date',
-            'genre' => 'nullable|in:homme,femme,autre'
+            'phone' => 'nullable|string|max:20',
+            'role' => 'nullable|in:admin,formateur,participant'
         ]);
 
         if ($validator->fails()) {
@@ -30,20 +28,12 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'nom' => $request->nom,
-            'prenom' => $request->prenom,
+            'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'telephone' => $request->telephone,
-            'date_naissance' => $request->date_naissance,
-            'genre' => $request->genre,
+            'phone' => $request->phone,
+            'role' => $request->role ?? 'participant',
         ]);
-
-        // Assigner le rôle d'apprenant par défaut
-        $studentRole = Role::where('name', 'student')->first();
-        if ($studentRole) {
-            $user->assignRole($studentRole);
-        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -68,15 +58,14 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->firstOrFail();
-        $user->update(['derniere_connexion' => now()]);
-
+        
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Connexion réussie',
             'user' => $user,
             'token' => $token,
-            'roles' => $user->getRoleNames()
+            'roles' => [$user->role]
         ]);
     }
 
@@ -92,11 +81,10 @@ class AuthController extends Controller
     public function user(Request $request)
     {
         $user = $request->user();
-        $user->load('roles');
 
         return response()->json([
             'user' => $user,
-            'permissions' => $user->getPermissionsViaRoles()->pluck('name')
+            'roles' => [$user->role]
         ]);
     }
 

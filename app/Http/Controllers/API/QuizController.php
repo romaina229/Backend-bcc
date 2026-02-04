@@ -6,25 +6,51 @@ use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Question;
+use App\Models\Enrollment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class QuizController extends Controller
 {
+    public function show($id)
+    {
+        $user = auth()->user();
+        
+        $quiz = Quiz::with(['questions' => function($query) {
+            $query->orderBy('ordre')
+                ->select('id', 'quiz_id', 'question', 'type', 'options', 'ordre', 'points');
+        }])->findOrFail($id);
+        
+        // Vérifier si l'utilisateur peut tenter le quiz
+        if (!$this->canAttemptQuiz($user, $quiz)) {
+            $attempts = QuizAttempt::where('user_id', $user->id)
+                ->where('quiz_id', $id)
+                ->get();
+            
+            return response()->json([
+                'message' => 'Vous ne pouvez plus tenter ce quiz',
+                'attempts' => $attempts
+            ], 403);
+        }
+        
+        return response()->json($quiz);
+    }
+    
     public function getWeeklyQuiz(Request $request, $week)
     {
         $user = $request->user();
-        $enrolledCourseIds = $user->enrollments()->pluck('cours_id');
+        
+        // Récupérer les cours auxquels l'utilisateur est inscrit
+        $enrolledCourseIds = Enrollment::where('user_id', $user->id)
+            ->where('status', 'actif')
+            ->pluck('cours_id');
         
         $quiz = Quiz::where('type', 'semaine')
             ->where('semaine', $week)
             ->whereIn('cours_id', $enrolledCourseIds)
             ->with(['questions' => function($query) {
                 $query->orderBy('ordre')
-                    ->select('id', 'quiz_id', 'question', 'type', 'options', 'ordre')
-                    ->with(['answers' => function($q) {
-                        $q->select('id', 'question_id', 'reponse');
-                    }]);
+                    ->select('id', 'quiz_id', 'question', 'type', 'options', 'ordre', 'points');
             }])
             ->first();
             
@@ -33,8 +59,11 @@ class QuizController extends Controller
         }
         
         // Vérifier si l'utilisateur peut tenter le quiz
-        if (!$quiz->canAttempt($user)) {
-            $attempts = $quiz->userAttempts($user)->get();
+        if (!$this->canAttemptQuiz($user, $quiz)) {
+            $attempts = QuizAttempt::where('user_id', $user->id)
+                ->where('quiz_id', $quiz->id)
+                ->get();
+            
             return response()->json([
                 'message' => 'Vous ne pouvez plus tenter ce quiz',
                 'attempts' => $attempts
@@ -51,11 +80,11 @@ class QuizController extends Controller
             'time_spent' => 'nullable|integer'
         ]);
         
-        $quiz = Quiz::findOrFail($id);
+        $quiz = Quiz::with('questions')->findOrFail($id);
         $user = $request->user();
         
         // Vérifier si l'utilisateur peut tenter le quiz
-        if (!$quiz->canAttempt($user)) {
+        if (!$this->canAttemptQuiz($user, $quiz)) {
             return response()->json([
                 'message' => 'Vous ne pouvez plus tenter ce quiz'
             ], 403);
@@ -65,7 +94,7 @@ class QuizController extends Controller
         
         try {
             // Calculer le score
-            $score = $quiz->calculateScore($request->answers);
+            $score = $this->calculateScore($quiz, $request->answers);
             $passed = $score >= $quiz->note_minimale;
             
             // Enregistrer la tentative
@@ -81,25 +110,7 @@ class QuizController extends Controller
             
             // Mettre à jour la progression si c'est un quiz de semaine
             if ($quiz->type === 'semaine' && $passed) {
-                $enrollment = $user->enrollments()
-                    ->where('cours_id', $quiz->cours_id)
-                    ->first();
-                    
-                if ($enrollment) {
-                    $progress = $enrollment->progression;
-                    $weeklyProgress = 100 / 12; // 12 semaines par cours
-                    $newProgress = min(100, $progress + $weeklyProgress);
-                    
-                    $enrollment->update([
-                        'progression' => $newProgress,
-                        'semaine_actuelle' => $quiz->semaine
-                    ]);
-                    
-                    // Si le cours est terminé (100%), générer un certificat
-                    if ($newProgress >= 100) {
-                        $this->generateCertificate($user, $quiz->course);
-                    }
-                }
+                $this->updateCourseProgress($user, $quiz);
             }
             
             DB::commit();
@@ -113,16 +124,20 @@ class QuizController extends Controller
             
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Erreur lors de la soumission'], 500);
+            return response()->json([
+                'message' => 'Erreur lors de la soumission',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
     
     public function getResults(Request $request, $id)
     {
         $user = $request->user();
-        $quiz = Quiz::with(['questions.answers'])->findOrFail($id);
+        $quiz = Quiz::with(['questions'])->findOrFail($id);
         
-        $attempts = $quiz->userAttempts($user)
+        $attempts = QuizAttempt::where('user_id', $user->id)
+            ->where('quiz_id', $id)
             ->orderByDesc('created_at')
             ->get();
             
@@ -139,9 +154,164 @@ class QuizController extends Controller
         ]);
     }
     
-    private function generateCertificate($user, $course)
+    public function quizHistory(Request $request)
     {
-        // Logique de génération de certificat
-        // Cette méthode serait implémentée dans le CertificateController
+        $user = $request->user();
+        
+        $attempts = QuizAttempt::where('user_id', $user->id)
+            ->with('quiz.course')
+            ->orderByDesc('created_at')
+            ->paginate(15);
+        
+        return response()->json($attempts);
+    }
+    
+    public function store(Request $request)
+    {
+        $request->validate([
+            'titre' => 'required|string|max:200',
+            'description' => 'nullable|string',
+            'cours_id' => 'required|exists:courses,id',
+            'module_id' => 'nullable|exists:modules,id',
+            'type' => 'required|in:semaine,module,final',
+            'semaine' => 'required_if:type,semaine|nullable|integer',
+            'duree' => 'nullable|integer',
+            'note_minimale' => 'nullable|integer|min:0|max:100',
+            'max_tentatives' => 'nullable|integer|min:1',
+        ]);
+        
+        $quiz = Quiz::create([
+            'titre' => $request->titre,
+            'description' => $request->description,
+            'cours_id' => $request->cours_id,
+            'module_id' => $request->module_id,
+            'type' => $request->type,
+            'semaine' => $request->semaine,
+            'duree' => $request->duree,
+            'note_minimale' => $request->note_minimale ?? 70,
+            'max_tentatives' => $request->max_tentatives,
+            'date_debut' => $request->date_debut,
+            'date_fin' => $request->date_fin,
+            'statut' => $request->statut ?? 'brouillon',
+            'instructions' => $request->instructions,
+            'ordre' => $request->ordre ?? 0,
+        ]);
+        
+        return response()->json([
+            'message' => 'Quiz créé avec succès',
+            'quiz' => $quiz
+        ], 201);
+    }
+    
+    public function getQuizResponses(Request $request, $id)
+    {
+        $quiz = Quiz::findOrFail($id);
+        
+        // Vérifier que l'utilisateur est formateur du cours
+        if ($quiz->course->instructor_id !== $request->user()->id && !$request->user()->isAdmin()) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+        
+        $attempts = QuizAttempt::where('quiz_id', $id)
+            ->with('user')
+            ->orderByDesc('created_at')
+            ->paginate(20);
+        
+        return response()->json($attempts);
+    }
+    
+    // Méthodes privées
+    private function canAttemptQuiz($user, $quiz)
+    {
+        if ($quiz->max_tentatives === null) {
+            return true;
+        }
+        
+        $attemptCount = QuizAttempt::where('user_id', $user->id)
+            ->where('quiz_id', $quiz->id)
+            ->count();
+        
+        return $attemptCount < $quiz->max_tentatives;
+    }
+    
+    private function calculateScore($quiz, $answers)
+    {
+        $totalPoints = 0;
+        $earnedPoints = 0;
+        
+        foreach ($quiz->questions as $question) {
+            $totalPoints += $question->points ?? 1;
+            
+            $userAnswer = $answers[$question->id] ?? null;
+            
+            if ($this->isAnswerCorrect($question, $userAnswer)) {
+                $earnedPoints += $question->points ?? 1;
+            }
+        }
+        
+        return $totalPoints > 0 ? round(($earnedPoints / $totalPoints) * 100, 2) : 0;
+    }
+    
+    private function isAnswerCorrect($question, $userAnswer)
+    {
+        if ($userAnswer === null) {
+            return false;
+        }
+        
+        switch ($question->type) {
+            case 'multiple':
+            case 'unique':
+                return $userAnswer === $question->correct_answer;
+            
+            case 'texte':
+                return strtolower(trim($userAnswer)) === strtolower(trim($question->correct_answer));
+            
+            default:
+                return false;
+        }
+    }
+    
+    private function updateCourseProgress($user, $quiz)
+    {
+        $enrollment = Enrollment::where('user_id', $user->id)
+            ->where('cours_id', $quiz->cours_id)
+            ->first();
+        
+        if (!$enrollment) {
+            return;
+        }
+        
+        // Calculer la progression basée sur les semaines
+        $totalWeeks = Quiz::where('cours_id', $quiz->cours_id)
+            ->where('type', 'semaine')
+            ->distinct('semaine')
+            ->count();
+        
+        if ($totalWeeks === 0) {
+            return;
+        }
+        
+        $completedWeeks = QuizAttempt::where('user_id', $user->id)
+            ->where('statut', 'reussi')
+            ->whereHas('quiz', function($q) use ($quiz) {
+                $q->where('cours_id', $quiz->cours_id)
+                  ->where('type', 'semaine');
+            })
+            ->distinct('quiz_id')
+            ->count();
+        
+        $progress = ($completedWeeks / $totalWeeks) * 100;
+        
+        $enrollment->update([
+            'progress' => min(100, $progress)
+        ]);
+        
+        // Si 100%, marquer comme terminé
+        if ($progress >= 100) {
+            $enrollment->update([
+                'status' => 'termine',
+                'completed_at' => now()
+            ]);
+        }
     }
 }

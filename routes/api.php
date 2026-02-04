@@ -21,13 +21,15 @@ use App\Http\Controllers\API\AdminController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes
+| API Routes - CORRECTED
 |--------------------------------------------------------------------------
 */
 
-// Routes publiques
+// Routes publiques - Authentification
 Route::post('/connexion', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login']); // Alias pour compatibilité
 Route::post('/inscription', [AuthController::class, 'register']);
+Route::post('/register', [AuthController::class, 'register']); // Alias
 Route::post('/mot-de-passe-oublie', [AuthController::class, 'forgotPassword']);
 Route::post('/reinitialiser-mot-de-passe', [AuthController::class, 'resetPassword']);
 
@@ -40,7 +42,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Authentification
     Route::post('/deconnexion', [AuthController::class, 'logout']);
+    Route::post('/logout', [AuthController::class, 'logout']); // Alias
     Route::get('/utilisateur', [AuthController::class, 'user']);
+    Route::get('/me', [AuthController::class, 'user']); // Alias
     Route::put('/profil', [UserController::class, 'updateProfile']);
     Route::put('/mot-de-passe', [UserController::class, 'updatePassword']);
     Route::post('/avatar', [UserController::class, 'uploadAvatar']);
@@ -63,6 +67,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Quiz et évaluations
     Route::get('/quiz/semaine/{week}', [QuizController::class, 'getWeeklyQuiz']);
+    Route::get('/quiz/{id}', [QuizController::class, 'show']);
     Route::post('/quiz/{id}/soumettre', [QuizController::class, 'submitQuiz']);
     Route::get('/quiz/{id}/resultats', [QuizController::class, 'getResults']);
     Route::get('/quiz/historique', [QuizController::class, 'quizHistory']);
@@ -100,24 +105,39 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/notifications/tout-lire', [NotificationController::class, 'markAllAsRead']);
     
     // Routes administrateur
-    Route::middleware(['role:admin'])->group(function () {
-        Route::apiResource('admin/utilisateurs', AdminController::class);
-        Route::apiResource('admin/cours', CourseController::class)->except(['index', 'show']);
-        Route::post('admin/cours/{id}/modules', [ModuleController::class, 'store']);
-        Route::post('admin/modules/{id}/lecons', [LessonController::class, 'store']);
-        Route::apiResource('admin/quiz', QuizController::class);
-        Route::apiResource('admin/questions', QuestionController::class);
-        Route::get('admin/statistiques', [DashboardController::class, 'statistics']);
-        Route::get('admin/rapports', [DashboardController::class, 'reports']);
+    Route::middleware(['can:admin'])->group(function () {
+        Route::prefix('admin')->group(function () {
+            Route::get('/utilisateurs', [AdminController::class, 'indexUsers']);
+            Route::put('/utilisateurs/{id}/statut', [AdminController::class, 'updateUserStatus']);
+            Route::delete('/utilisateurs/{id}', [AdminController::class, 'deleteUser']);
+            
+            Route::get('/cours', [AdminController::class, 'indexCourses']);
+            Route::put('/cours/{id}/statut', [AdminController::class, 'updateCourseStatus']);
+            Route::delete('/cours/{id}', [AdminController::class, 'deleteCourse']);
+            
+            Route::apiResource('cours', CourseController::class)->except(['index', 'show']);
+            Route::post('/cours/{id}/modules', [ModuleController::class, 'store']);
+            Route::post('/modules/{id}/lecons', [LessonController::class, 'store']);
+            
+            Route::get('/stats', [DashboardController::class, 'advancedStats']);
+            Route::get('/statistiques', [DashboardController::class, 'statistics']);
+            Route::get('/rapports', [DashboardController::class, 'reports']);
+            
+            Route::get('/export/utilisateurs', [AdminController::class, 'exportUsers']);
+            Route::get('/export/cours', [AdminController::class, 'exportCourses']);
+            Route::get('/export/paiements', [AdminController::class, 'exportPayments']);
+        });
     });
     
     // Routes formateur
-    Route::middleware(['role:instructor|admin'])->group(function () {
-        Route::get('formateur/cours', [CourseController::class, 'instructorCourses']);
-        Route::get('formateur/cours/{id}/etudiants', [EnrollmentController::class, 'courseStudents']);
-        Route::post('formateur/quiz', [QuizController::class, 'store']);
-        Route::get('formateur/quiz/{id}/reponses', [QuizController::class, 'getQuizResponses']);
-        Route::post('formateur/cours/{id}/certificats', [CertificateController::class, 'generateForCourse']);
+    Route::middleware(['can:instructor'])->group(function () {
+        Route::prefix('formateur')->group(function () {
+            Route::get('/cours', [CourseController::class, 'instructorCourses']);
+            Route::get('/cours/{id}/etudiants', [EnrollmentController::class, 'courseStudents']);
+            Route::post('/quiz', [QuizController::class, 'store']);
+            Route::get('/quiz/{id}/reponses', [QuizController::class, 'getQuizResponses']);
+            Route::post('/cours/{id}/certificats', [CertificateController::class, 'generateForCourse']);
+        });
     });
 });
 
